@@ -17,7 +17,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 1
 
@@ -30,43 +30,100 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Locate and prepare Gradle project
+      - name: Prepare Android Project & Gradle Configurations
         run: |
           echo "=== Workspace inspection ==="
           pwd
           ls -la
-          
-          # If settings.gradle(.kts) is not in the root directory, search for it
+
+          # 1. Search for subfolder containing the project if not in root
           if [ ! -f "settings.gradle.kts" ] && [ ! -f "settings.gradle" ]; then
-            echo "settings.gradle(.kts) not found in root. Searching subdirectories..."
-            SETTINGS_FILE=$(find . -mindepth 2 -name "settings.gradle.kts" -o -name "settings.gradle" | head -n 1)
-            
+            SETTINGS_FILE=$(find . -mindepth 2 -name "settings.gradle.kts" -o -name "settings.gradle" 2>/dev/null | head -n 1)
             if [ -n "$SETTINGS_FILE" ]; then
               PROJECT_DIR=$(dirname "$SETTINGS_FILE")
-              echo "Found Gradle project in: $PROJECT_DIR"
               echo "Moving files from $PROJECT_DIR to root workspace..."
               shopt -s dotglob
               mv "$PROJECT_DIR"/* . 2>/dev/null || true
-            else
-              echo "::error::No Gradle build found! Your GitHub repository does not contain 'settings.gradle.kts' or 'build.gradle.kts'."
-              echo "Make sure to push all Android project files from Google AI Studio (top-right menu > Push to GitHub)."
-              exit 1
             fi
           fi
-          
-          # Ensure gradlew has executable permissions
-          chmod +x gradlew 2>/dev/null || true
-          
-          # Ensure .env exists to satisfy Secrets Gradle Plugin
-          if [ ! -f .env ]; then
-            if [ -f .env.example ]; then
+
+          # 2. Restore settings.gradle.kts if missing from GitHub commit
+          if [ ! -f "settings.gradle.kts" ] && [ ! -f "settings.gradle" ]; then
+            echo "settings.gradle.kts was missing from git commit. Creating it now..."
+            cat << 'EOF' > settings.gradle.kts
+          pluginManagement {
+            repositories {
+              google {
+                content {
+                  includeGroupByRegex("com\\.android.*")
+                  includeGroupByRegex("com\\.google.*")
+                  includeGroupByRegex("androidx.*")
+                }
+              }
+              mavenCentral()
+              gradlePluginPortal()
+            }
+          }
+
+          plugins { id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0" }
+
+          dependencyResolutionManagement {
+            repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+            repositories {
+              google()
+              mavenCentral()
+            }
+          }
+
+          rootProject.name = "DevToggle"
+
+          include(":app")
+          EOF
+          fi
+
+          # 3. Restore root build.gradle.kts if missing from GitHub commit
+          if [ ! -f "build.gradle.kts" ] && [ ! -f "build.gradle" ]; then
+            echo "build.gradle.kts was missing from git commit. Creating it now..."
+            cat << 'EOF' > build.gradle.kts
+          plugins {
+            alias(libs.plugins.android.application) apply false
+            alias(libs.plugins.kotlin.compose) apply false
+            alias(libs.plugins.google.devtools.ksp) apply false
+            alias(libs.plugins.secrets) apply false
+            alias(libs.plugins.google.services) apply false
+          }
+          EOF
+          fi
+
+          # 4. Restore gradle.properties if missing from GitHub commit
+          if [ ! -f "gradle.properties" ]; then
+            echo "gradle.properties was missing from git commit. Creating it now..."
+            cat << 'EOF' > gradle.properties
+          org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8
+          org.gradle.parallel=true
+          kotlin.code.style=official
+          android.nonTransitiveRClass=true
+          org.gradle.caching=true
+          org.gradle.configuration-cache=true
+          org.gradle.workers.max=4
+          kotlin.compiler.execution.strategy=in-process
+          googleServices.missing.passthrough=true
+          EOF
+          fi
+
+          # 5. Ensure .env exists to satisfy Secrets Gradle Plugin
+          if [ ! -f ".env" ]; then
+            if [ -f ".env.example" ]; then
               cp .env.example .env
             else
               touch .env
             fi
           fi
-          
-          echo "=== Ready to build with files: ==="
+
+          # 6. Ensure gradlew is executable
+          chmod +x gradlew 2>/dev/null || true
+
+          echo "=== Ready with configuration: ==="
           ls -la
 
       - name: Run Unit Tests
