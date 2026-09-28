@@ -1,0 +1,6 @@
+{
+  "name": "DevToggle",
+  "description": "Lightweight tool to toggle Android developer settings with a one-tap home screen widget.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

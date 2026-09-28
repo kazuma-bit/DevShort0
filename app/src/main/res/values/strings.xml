@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">DevToggle</string>
+    <string name="widget_name">Developer Settings Toggle</string>
+    <string name="widget_description">One-tap toggle for Developer Options</string>
+    <string name="tile_label">Dev Options</string>
+    <string name="status_on">ON</string>
+    <string name="status_off">OFF</string>
+    <string name="tap_to_toggle">Tap to toggle</string>
+    <string name="tap_to_open">Tap to open settings</string>
+</resources>
