@@ -89,7 +89,19 @@ if [ ! -f ".env" ]; then
   fi
 fi
 
-# 6. Ensure gradlew is executable
+# 6. Ensure debug.keystore exists for debug signing
+if [ ! -f "debug.keystore" ]; then
+  if [ -f "debug.keystore.base64" ]; then
+    echo "Restoring debug.keystore from base64..."
+    base64 -d debug.keystore.base64 > debug.keystore || true
+  fi
+  if [ ! -f "debug.keystore" ]; then
+    echo "Generating fallback debug.keystore..."
+    keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null || true
+  fi
+fi
+
+# 7. Ensure gradlew is executable
 chmod +x gradlew 2>/dev/null || true
 
 echo "=== Build Environment Ready ==="
