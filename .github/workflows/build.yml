@@ -30,18 +30,28 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Setup environment and check files
+      - name: Locate and prepare Gradle project
         run: |
-          echo "Current working directory:"
+          echo "=== Workspace inspection ==="
           pwd
-          echo "Files in checkout:"
           ls -la
           
-          # If gradlew does not exist in root, check if it is in a subdirectory
-          if [ ! -f gradlew ] && [ -d DevShort ]; then
-            echo "Moving contents from DevShort subdirectory to root"
-            shopt -s dotglob
-            mv DevShort/* . 2>/dev/null || true
+          # If settings.gradle(.kts) is not in the root directory, search for it
+          if [ ! -f "settings.gradle.kts" ] && [ ! -f "settings.gradle" ]; then
+            echo "settings.gradle(.kts) not found in root. Searching subdirectories..."
+            SETTINGS_FILE=$(find . -mindepth 2 -name "settings.gradle.kts" -o -name "settings.gradle" | head -n 1)
+            
+            if [ -n "$SETTINGS_FILE" ]; then
+              PROJECT_DIR=$(dirname "$SETTINGS_FILE")
+              echo "Found Gradle project in: $PROJECT_DIR"
+              echo "Moving files from $PROJECT_DIR to root workspace..."
+              shopt -s dotglob
+              mv "$PROJECT_DIR"/* . 2>/dev/null || true
+            else
+              echo "::error::No Gradle build found! Your GitHub repository does not contain 'settings.gradle.kts' or 'build.gradle.kts'."
+              echo "Make sure to push all Android project files from Google AI Studio (top-right menu > Push to GitHub)."
+              exit 1
+            fi
           fi
           
           # Ensure gradlew has executable permissions
@@ -49,8 +59,15 @@ jobs:
           
           # Ensure .env exists to satisfy Secrets Gradle Plugin
           if [ ! -f .env ]; then
-            cp .env.example .env 2>/dev/null || touch .env
+            if [ -f .env.example ]; then
+              cp .env.example .env
+            else
+              touch .env
+            fi
           fi
+          
+          echo "=== Ready to build with files: ==="
+          ls -la
 
       - name: Run Unit Tests
         run: ./gradlew :app:testDebugUnitTest --no-daemon
