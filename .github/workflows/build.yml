@@ -32,19 +32,32 @@ jobs:
 
       - name: Prepare Android Project
         run: |
-          if [ -f scripts/prepare-build.sh ]; then
-            chmod +x scripts/prepare-build.sh
-            bash scripts/prepare-build.sh
-          else
-            chmod +x gradlew || true
-            if [ ! -f .env ]; then
-              cp .env.example .env 2>/dev/null || touch .env
-            fi
+          echo "=== Preparing Android Build Environment ==="
+
+          # 1. Ensure .env and .env.example exist for Secrets Gradle Plugin
+          touch .env .env.example
+
+          # 2. Generate debug.keystore required by app's debugConfig signing
+          if [ ! -f "debug.keystore" ]; then
+            echo "Generating debug.keystore..."
+            keytool -genkey -v -keystore debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
           fi
+
+          # 3. Ensure gradlew is executable
+          chmod +x gradlew || true
+
+          echo "=== Setup complete ==="
+          ls -la debug.keystore .env
 
       - name: Run Unit Tests
         run: |
-          # Check for testDebugUnitTest or fallback to test task
           if ./gradlew :app:tasks --all --no-daemon 2>&1 | grep -q "testDebugUnitTest"; then
             echo "Running :app:testDebugUnitTest..."
             ./gradlew :app:testDebugUnitTest --no-daemon
@@ -52,11 +65,11 @@ jobs:
             echo "Running :app:test..."
             ./gradlew :app:test --no-daemon || true
           else
-            echo "No unit test tasks registered for :app, skipping unit tests."
+            echo "No unit tests to run."
           fi
 
       - name: Build Debug APK
-        run: ./gradlew :app:assembleDebug --no-daemon
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
